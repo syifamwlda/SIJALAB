@@ -21,6 +21,7 @@ import { NetworkTopologySimulator } from './sub/NetworkTopologySimulator';
 import { VirtualBreadboardSimulator } from './sub/VirtualBreadboardSimulator';
 import { UtpCrimpingGame } from './sub/UtpCrimpingGame';
 import { SubnetSpeedChallenge } from './sub/SubnetSpeedChallenge';
+import { QuestionBankQuizChallenge } from './sub/QuestionBankQuizChallenge';
 import { TECHNICAL_CROSSWORD_DATA } from '../../data/challengesData';
 
 export const InteractiveChallengeView = () => {
@@ -87,15 +88,15 @@ export const InteractiveChallengeView = () => {
       difficulty: 'Menengah'
     },
     {
-      id: 'tech-crossword',
-      title: 'Technical Crossword (TTS SIJA)',
-      tagline: 'Teka-Teki Silang kosakata esensial jaringan, server, dan IoT SMK SIJA.',
-      category: 'Teka-Teki Kata',
-      icon: Grid,
-      color: 'from-cyan-600 to-blue-600',
-      badge: 'Kosakata SIJA',
-      xpReward: 70,
-      difficulty: 'Dasar'
+      id: 'question-bank',
+      title: 'Bank Soal & Tanya Jawab Bidang SIJA',
+      tagline: 'Latihan soal berbobot per bidang keahlian: Cisco Networking, Linux SysAdmin, SIoT ESP32, dan Troubleshooting.',
+      category: 'Bank Soal Kejuruan',
+      icon: BookOpen,
+      color: 'from-blue-600 to-indigo-600',
+      badge: 'Tanya Jawab Interaktif',
+      xpReward: 90,
+      difficulty: 'Semua Tingkat'
     }
   ];
 
@@ -151,52 +152,7 @@ export const InteractiveChallengeView = () => {
         {activeChallengeId === 'iot-breadboard' && <VirtualBreadboardSimulator />}
         {activeChallengeId === 'utp-crimping' && <UtpCrimpingGame />}
         {activeChallengeId === 'subnet-speed' && <SubnetSpeedChallenge />}
-
-        {/* Crossword Runner */}
-        {activeChallengeId === 'tech-crossword' && (
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm max-w-2xl mx-auto space-y-6">
-            <div className="border-b border-slate-100 pb-3">
-              <h2 className="text-xl font-black text-slate-900">Teka-Teki Silang Kosakata SIJA</h2>
-              <p className="text-xs text-slate-500 font-medium">Ketik jawaban dengan huruf KAPITAL pada kotak nomor petunjuk.</p>
-            </div>
-
-            <div className="space-y-3">
-              {TECHNICAL_CROSSWORD_DATA.clues.map((c) => {
-                const userVal = crosswordInputs[c.number] || '';
-                const isCorrect = userVal === c.answer;
-
-                return (
-                  <div key={c.number} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-xs">
-                    <div className="flex items-center justify-between font-bold text-slate-700">
-                      <span>No {c.number} ({c.direction === 'across' ? 'Mendatar' : 'Menurun'}) — {c.answer.length} Huruf</span>
-                      {crosswordChecked && (
-                        <span className={isCorrect ? 'text-emerald-600' : 'text-rose-600 font-bold'}>
-                          {isCorrect ? '✓ Benar!' : `Salah (Jawaban: ${c.answer})`}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-slate-600 font-medium">{c.clue}</p>
-                    <input
-                      type="text"
-                      maxLength={c.answer.length}
-                      value={userVal}
-                      onChange={(e) => handleCrosswordChange(c.number, e.target.value)}
-                      placeholder={`Ketik kata (${c.answer.length} huruf)...`}
-                      className="w-full p-2.5 rounded-xl bg-white border border-slate-200 font-mono font-black text-slate-800 uppercase outline-hidden focus:border-cyan-500"
-                    />
-                  </div>
-                );
-              })}
-            </div>
-
-            <button
-              onClick={checkCrossword}
-              className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-md shadow-cyan-500/20 cursor-pointer"
-            >
-              Periksa Jawaban Teka-Teki Silang
-            </button>
-          </div>
-        )}
+        {(activeChallengeId === 'question-bank' || activeChallengeId === 'tech-crossword') && <QuestionBankQuizChallenge />}
       </div>
     );
   }

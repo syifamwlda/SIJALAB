@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Cpu,
   Zap,
@@ -9,571 +9,645 @@ import {
   Sparkles,
   Layers,
   Activity,
-  Radio,
   Sliders,
   Lightbulb,
   Check,
   BookOpen,
   ArrowRight,
   ShieldAlert,
-  Power
+  Power,
+  Sun,
+  Moon,
+  Thermometer,
+  Droplets,
+  Terminal,
+  Code
 } from 'lucide-react';
 import { useApp } from '../../../context/AppContext';
 
 export const VirtualBreadboardSimulator = () => {
   const { addXP, showToast } = useApp();
 
-  // Selected Lab Topic
-  const [activeLab, setActiveLab] = useState('led'); // 'led', 'dht22', 'relay'
+  // Active Project Selection
+  const [activeProject, setActiveProject] = useState('streetlight'); // 'streetlight', 'server-alarm', 'smart-garden'
 
-  // Component Specific States
-  // 1. LED State
-  const [ledHasResistor, setLedHasResistor] = useState(true);
-  const [ledPin, setLedPin] = useState('GPIO 18');
-  const [ledPowerState, setLedPowerState] = useState(false);
+  // Active View Tab: 'workbench' (Simulasi), 'code' (Kode Arduino C++), 'wiring' (Skema Pinout)
+  const [activeTab, setActiveTab] = useState('workbench');
 
-  // 2. DHT22 State
-  const [dhtVoltage, setDhtVoltage] = useState('3.3V'); // '3.3V' or '5V'
-  const [dhtPin, setDhtPin] = useState('GPIO 4');
-  const [dhtReadState, setDhtReadState] = useState(false);
+  // --- PROJECT 1: Smart Street Light (LDR + LED) State ---
+  const [lightAmbient, setLightAmbient] = useState(2500); // 0 (Gelap) to 4095 (Terang)
+  const [ledPinState, setLedPinState] = useState(false);
 
-  // 3. Relay State
-  const [relayTrigger, setRelayTrigger] = useState(false);
+  // --- PROJECT 2: Server Overheat Alarm (DHT22 + Buzzer) State ---
+  const [serverTemp, setServerTemp] = useState(26); // in Celcius
+  const [buzzerAlert, setBuzzerAlert] = useState(false);
 
-  // Feedback Notification State
-  const [alertInfo, setAlertInfo] = useState(null);
+  // --- PROJECT 3: Smart Garden Pump (Soil Moisture + Relay) State ---
+  const [soilMoisture, setSoilMoisture] = useState(65); // percentage (0 - 100%)
+  const [pumpRelayState, setPumpRelayState] = useState(false);
 
-  // Handle LED Test
-  const handleToggleLed = () => {
-    if (!ledHasResistor) {
-      setLedPowerState(false);
-      setAlertInfo({
-        type: 'danger',
-        title: '⚠️ BAHAYA: LED HANGUS / OVERCURRENT!',
-        msg: 'Kamu menyalakan LED tanpa Resistor pembatas arus (220Ω). Dalam dunia nyata, LED akan meledak kecil atau putus terbakar dan merusak pin GPIO ESP32!',
-        solution: 'Pasang Resistor 220Ω terlebih dahulu dengan mengaktifkan toggle resistor.'
-      });
-      return;
+  // Serial Monitor Output
+  const [serialLogs, setSerialLogs] = useState([
+    '[ESP32] Core 1 running bootloader v4.4...',
+    '[ESP32] Hardware GPIO Initialized @ 115200 baud.',
+    '[ESP32] Sistem siap menjalankan logika otomasi sensor.'
+  ]);
+
+  // Handle Project 1 LDR simulation logic
+  useEffect(() => {
+    if (activeProject === 'streetlight') {
+      const isDark = lightAmbient < 1200;
+      setLedPinState(isDark);
+      const timestamp = new Date().toLocaleTimeString();
+      setSerialLogs((prev) => [
+        ...prev.slice(-6),
+        `[${timestamp}] [LDR-ADC34] Raw: ${lightAmbient} (${isDark ? 'GELAP' : 'TERANG'}) -> Lampu Jalan: ${isDark ? 'ON (GPIO 18 HIGH)' : 'OFF (GPIO 18 LOW)'}`
+      ]);
     }
+  }, [lightAmbient, activeProject]);
 
-    const nextState = !ledPowerState;
-    setLedPowerState(nextState);
-    if (nextState) {
-      setAlertInfo({
-        type: 'success',
-        title: '✨ Rangkaian LED Menyala Sempurna!',
-        msg: `Arus mengalir aman dari ${ledPin} (3.3V) melewati Resistor 220Ω menuju kaki Anoda (+), lalu kembali ke GND lewat Katoda (-).`,
-        solution: null
-      });
-      addXP(30);
-      if (showToast) showToast('Rangkaian LED Sukses! (+30 XP)', 'success');
-    } else {
-      setAlertInfo(null);
+  // Handle Project 2 Temperature Alarm logic
+  useEffect(() => {
+    if (activeProject === 'server-alarm') {
+      const isOverheat = serverTemp > 32;
+      setBuzzerAlert(isOverheat);
+      const timestamp = new Date().toLocaleTimeString();
+      setSerialLogs((prev) => [
+        ...prev.slice(-6),
+        `[${timestamp}] [DHT22-GPIO4] Suhu Rak Server: ${serverTemp}°C -> ${isOverheat ? '⚠️ OVERHEAT! BUZZER ALARM ON (1000Hz)' : 'STATUS NORMAL'}`
+      ]);
     }
-  };
+  }, [serverTemp, activeProject]);
 
-  // Handle DHT22 Test
-  const handleReadDht = () => {
-    if (dhtVoltage === '5V') {
-      setDhtReadState(false);
-      setAlertInfo({
-        type: 'warning',
-        title: '⚠️ TEGANGAN TERLALU TINGGI!',
-        msg: 'Sensor dicolok ke pin 5V (VIN). ESP32 memiliki toleransi logika maksimal 3.6V. Menghubungkan data 5V berisiko merusak pin ADC/GPIO ESP32!',
-        solution: 'Pindahkan kabel VCC ke pin 3.3V (3V3) ESP32.'
-      });
-      return;
+  // Handle Project 3 Smart Garden logic
+  useEffect(() => {
+    if (activeProject === 'smart-garden') {
+      const isDry = soilMoisture < 30;
+      setPumpRelayState(isDry);
+      const timestamp = new Date().toLocaleTimeString();
+      setSerialLogs((prev) => [
+        ...prev.slice(-6),
+        `[${timestamp}] [SOIL-ADC32] Kelembaban: ${soilMoisture}% -> ${isDry ? 'TANAH KERING! RELAY ON (Pompa 220V Nyala)' : 'KELEMBABAN CUKUP (Relay OFF)'}`
+      ]);
     }
-
-    setDhtReadState(true);
-    setAlertInfo({
-      type: 'success',
-      title: '🌡️ Sensor Berhasil Membaca Lingkungan!',
-      msg: `Data diterima via 1-Wire pada ${dhtPin}: Suhu Ruang Lab = 27.4°C, Kelembaban Udara = 62.5% RH.`,
-      solution: null
-    });
-    addXP(40);
-    if (showToast) showToast('Sensor Lingkungan Sukses! (+40 XP)', 'success');
-  };
-
-  // Handle Relay Test
-  const handleToggleRelay = () => {
-    const nextState = !relayTrigger;
-    setRelayTrigger(nextState);
-    if (nextState) {
-      setAlertInfo({
-        type: 'success',
-        title: '🔌 Relay Terpicu: Lampu Rumah 220V Menyala!',
-        msg: 'Sinyal LOW/HIGH dari GPIO 23 memicu koil elektromagnetik relay (terdengar bunyi "KLIK!"). Kontak Normally Open (NO) menutup sehingga arus listrik AC 220V mengalir menyalakan lampu.',
-        solution: null
-      });
-      addXP(40);
-      if (showToast) showToast('Kontrol Saklar Relay Berhasil! (+40 XP)', 'success');
-    } else {
-      setAlertInfo(null);
-    }
-  };
-
-  const handleResetAll = () => {
-    setLedHasResistor(true);
-    setLedPowerState(false);
-    setDhtVoltage('3.3V');
-    setDhtReadState(false);
-    setRelayTrigger(false);
-    setAlertInfo(null);
-  };
+  }, [soilMoisture, activeProject]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      {/* 1. PENJELASAN KONSEP UNTUK SISWA (Mudah Dipelajari) */}
+      {/* 1. EDUCATIONAL HERO BANNER */}
       <div className="bg-linear-to-r from-teal-600 via-emerald-600 to-teal-700 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden">
         <div className="relative z-10 max-w-3xl space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/15 backdrop-blur-md rounded-full text-xs font-bold text-teal-100">
             <Lightbulb className="w-3.5 h-3.5 text-amber-300" />
-            <span>Dasar Elektronika & SIoT (Internet of Things)</span>
+            <span>Laboratorium Otomasi Embedded IoT (ESP32)</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-            Cara Belajar Merakit di Virtual Breadboard 🛠️
+            Simulasi Proyek Elektronika & SIoT Nyata 🛠️
           </h2>
           <p className="text-xs sm:text-sm text-teal-100/90 leading-relaxed">
-            <strong>Breadboard</strong> adalah papan uji coba tanpa perlu menyolder komponen. Di sini kamu akan belajar menghubungkan pin mikrokontroler <strong>ESP32</strong> dengan komponen elektronika nyata. Pastikan polaritas kaki komponen dan resistor pembatas arus sudah tepat sebelum menyalakan daya!
+            Bukan sekadar mencolok kabel! Di sini kamu mempelajari bagaimana mikrokontroler <strong>ESP32</strong> membaca sinyal input dari sensor fisik (LDR, DHT22, Soil Moisture), memproses logika kode C++, dan mengendalikan aktuator output (LED, Buzzer, Relay 220V AC).
           </p>
         </div>
       </div>
 
-      {/* 2. LAB SELECTOR PILLS */}
+      {/* 2. PROJECT SELECTOR BUTTONS */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-slate-200/90 shadow-xs">
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => {
-              setActiveLab('led');
-              setAlertInfo(null);
-            }}
+            onClick={() => setActiveProject('streetlight')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-              activeLab === 'led'
+              activeProject === 'streetlight'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
             }`}
           >
-            <Zap className="w-4 h-4" />
-            <span>Praktikum 1: Lampu LED + Resistor</span>
+            <Sun className="w-4 h-4" />
+            <span>Proyek 1: Lampu Jalan Otomatis (LDR + LED)</span>
           </button>
 
           <button
-            onClick={() => {
-              setActiveLab('dht22');
-              setAlertInfo(null);
-            }}
+            onClick={() => setActiveProject('server-alarm')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-              activeLab === 'dht22'
+              activeProject === 'server-alarm'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
             }`}
           >
-            <Activity className="w-4 h-4" />
-            <span>Praktikum 2: Sensor Suhu DHT22</span>
+            <Thermometer className="w-4 h-4" />
+            <span>Proyek 2: Alarm Overheat Server (DHT22 + Buzzer)</span>
           </button>
 
           <button
-            onClick={() => {
-              setActiveLab('relay');
-              setAlertInfo(null);
-            }}
+            onClick={() => setActiveProject('smart-garden')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-              activeLab === 'relay'
+              activeProject === 'smart-garden'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
             }`}
           >
-            <Power className="w-4 h-4" />
-            <span>Praktikum 3: Saklar Relay 220V</span>
+            <Droplets className="w-4 h-4" />
+            <span>Proyek 3: Pompa Irigasi Otomatis (Relay 220V)</span>
           </button>
         </div>
 
-        <button
-          onClick={handleResetAll}
-          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Reset Sirkuit</span>
-        </button>
+        {/* Tab Sub-views */}
+        <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+          <button
+            onClick={() => setActiveTab('workbench')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'workbench' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600'
+            }`}
+          >
+            Workbench
+          </button>
+          <button
+            onClick={() => setActiveTab('code')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'code' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600'
+            }`}
+          >
+            Kode Arduino C++
+          </button>
+          <button
+            onClick={() => setActiveTab('wiring')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'wiring' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600'
+            }`}
+          >
+            Skema Pinout
+          </button>
+        </div>
       </div>
 
-      {/* 3. MAIN WORKBENCH: VISUAL BREADBOARD & PINOUT TABLE */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Visual Workbench Canvas (Col 7) */}
-        <div className="lg:col-span-7 bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <div>
-              <h3 className="text-sm font-black text-slate-900">
-                Papan Rangkaian Prototipe (Breadboard & ESP32)
-              </h3>
-              <p className="text-xs text-slate-500">Amati aliran daya dan respons visual komponen</p>
-            </div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">
-              ESP32 Ready (3.3V Logic)
-            </span>
-          </div>
-
-          {/* Realistic Clean Breadboard Mockup */}
-          <div className="rounded-2xl bg-linear-to-b from-slate-100 to-slate-200 p-6 border border-slate-300 shadow-inner flex flex-col md:flex-row items-center justify-around gap-6 relative">
-            {/* ESP32 Microcontroller Board */}
-            <div className="w-44 bg-slate-900 border-2 border-slate-800 rounded-2xl p-4 flex flex-col items-center text-white shadow-lg">
-              <div className="w-16 h-6 bg-linear-to-r from-amber-600 to-yellow-600 rounded text-[9px] font-mono font-black text-slate-950 flex items-center justify-center mb-2">
-                ESP-WROOM
+      {/* 3. MAIN WORKBENCH VIEW */}
+      {activeTab === 'workbench' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Visual Hardware Workbench (Col 7) */}
+          <div className="lg:col-span-7 bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="text-sm font-black text-slate-900">
+                  {activeProject === 'streetlight' && 'Proyek 1: Sensor Cahaya LDR & Lampu LED'}
+                  {activeProject === 'server-alarm' && 'Proyek 2: Monitoring Suhu Server & Buzzer'}
+                  {activeProject === 'smart-garden' && 'Proyek 3: Kelembaban Tanah & Modul Relay'}
+                </h3>
+                <p className="text-xs text-slate-500">Ubah variabel sensor di panel kanan untuk mengamati respons aktuator</p>
               </div>
-              <Cpu className="w-8 h-8 text-cyan-400 my-1 animate-pulse" />
-              <div className="text-xs font-black">ESP32 DOIT V1</div>
-              <div className="text-[9px] font-mono text-cyan-300">30 Pins NodeMCU</div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">
+                ESP32 Logic (3.3V)
+              </span>
+            </div>
 
-              {/* Pins labels */}
-              <div className="w-full mt-3 grid grid-cols-2 gap-1 text-[9px] font-mono text-center">
-                <span className="bg-slate-800 text-blue-300 p-1 rounded font-bold">G18 (PWM)</span>
-                <span className="bg-slate-800 text-emerald-300 p-1 rounded font-bold">3V3 / GND</span>
-                <span className="bg-slate-800 text-teal-300 p-1 rounded font-bold">G4 (DATA)</span>
-                <span className="bg-slate-800 text-rose-300 p-1 rounded font-bold">G23 (RELAY)</span>
+            {/* Visual Hardware Mockup Box */}
+            <div className="rounded-2xl bg-linear-to-b from-slate-100 to-slate-200 p-6 border border-slate-300 shadow-inner flex flex-col md:flex-row items-center justify-around gap-6 min-h-[260px]">
+              {/* Microcontroller ESP32 */}
+              <div className="w-44 bg-slate-900 border-2 border-slate-800 rounded-2xl p-4 flex flex-col items-center text-white shadow-lg">
+                <div className="w-16 h-6 bg-linear-to-r from-amber-600 to-yellow-600 rounded text-[9px] font-mono font-black text-slate-950 flex items-center justify-center mb-2">
+                  ESP-WROOM
+                </div>
+                <Cpu className="w-8 h-8 text-cyan-400 my-1 animate-pulse" />
+                <div className="text-xs font-black">ESP32 DOIT V1</div>
+                <div className="text-[9px] font-mono text-cyan-300">Dual Core 240MHz</div>
+
+                <div className="w-full mt-3 grid grid-cols-2 gap-1 text-[9px] font-mono text-center">
+                  <span className="bg-slate-800 text-blue-300 p-1 rounded font-bold">3V3 / GND</span>
+                  <span className="bg-slate-800 text-emerald-300 p-1 rounded font-bold">
+                    {activeProject === 'streetlight' ? 'GPIO 34 (ADC)' : activeProject === 'server-alarm' ? 'GPIO 4 (DATA)' : 'GPIO 32 (ADC)'}
+                  </span>
+                  <span className="bg-slate-800 text-teal-300 p-1 rounded font-bold">
+                    {activeProject === 'streetlight' ? 'GPIO 18 (PWM)' : activeProject === 'server-alarm' ? 'GPIO 21 (BUZ)' : 'GPIO 23 (RELAY)'}
+                  </span>
+                  <span className="bg-slate-800 text-rose-300 p-1 rounded font-bold">VIN (5V)</span>
+                </div>
               </div>
-            </div>
 
-            {/* Breadboard Connection Component Box */}
-            <div className="flex-1 w-full max-w-xs bg-white rounded-2xl p-5 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-center shadow-xs min-h-[220px]">
-              {/* COMPONENT 1: LED */}
-              {activeLab === 'led' && (
-                <div className="space-y-3">
-                  <div
-                    className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center transition-all ${
-                      ledPowerState
-                        ? 'bg-rose-500 shadow-2xl shadow-rose-500/80 ring-8 ring-rose-200'
-                        : 'bg-rose-100 border-2 border-rose-300'
-                    }`}
-                  >
-                    <Zap
-                      className={`w-10 h-10 ${
-                        ledPowerState ? 'text-white fill-white animate-bounce' : 'text-rose-400'
-                      }`}
-                    />
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-black text-slate-900">Lampu LED Merah 5mm</h4>
-                    <p className="text-[11px] text-slate-500">
-                      Resistor: {ledHasResistor ? '✅ 220Ω Terpasang' : '❌ Tanpa Resistor (Bahaya!)'}
-                    </p>
-                  </div>
-                  <span
-                    className={`inline-block px-3 py-1 rounded-full text-xs font-black ${
-                      ledPowerState ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    Status: {ledPowerState ? 'MENYALA TERANG ⚡' : 'MATI (OFF)'}
-                  </span>
-                </div>
-              )}
-
-              {/* COMPONENT 2: DHT22 */}
-              {activeLab === 'dht22' && (
-                <div className="space-y-3">
-                  <div
-                    className={`w-20 h-20 rounded-2xl mx-auto flex items-center justify-center transition-all ${
-                      dhtReadState
-                        ? 'bg-teal-500 shadow-2xl shadow-teal-500/60 ring-8 ring-teal-200'
-                        : 'bg-teal-100 border-2 border-teal-300'
-                    }`}
-                  >
-                    <Activity
-                      className={`w-10 h-10 ${dhtReadState ? 'text-white' : 'text-teal-600'}`}
-                    />
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-black text-slate-900">Sensor Suhu & Kelembaban DHT22</h4>
-                    <p className="text-[11px] text-slate-500">Tegangan Masukan: {dhtVoltage}</p>
-                  </div>
-                  <span
-                    className={`inline-block px-3 py-1 rounded-full text-xs font-black ${
-                      dhtReadState ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    {dhtReadState ? '27.4°C | 62.5% RH' : 'Menunggu Pembacaan'}
-                  </span>
-                </div>
-              )}
-
-              {/* COMPONENT 3: RELAY */}
-              {activeLab === 'relay' && (
-                <div className="space-y-3">
-                  <div
-                    className={`w-20 h-20 rounded-2xl mx-auto flex items-center justify-center transition-all ${
-                      relayTrigger
-                        ? 'bg-amber-500 shadow-2xl shadow-amber-500/60 ring-8 ring-amber-200'
-                        : 'bg-amber-100 border-2 border-amber-300'
-                    }`}
-                  >
-                    <Power
-                      className={`w-10 h-10 ${relayTrigger ? 'text-white' : 'text-amber-700'}`}
-                    />
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-black text-slate-900">Modul Relay 1-Channel</h4>
-                    <p className="text-[11px] text-slate-500">Saklar Beban Listrik Rumah (220V AC)</p>
-                  </div>
-                  <span
-                    className={`inline-block px-3 py-1 rounded-full text-xs font-black ${
-                      relayTrigger ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    {relayTrigger ? 'RELAY AKTIF (KLIK!) — LAMPU ON' : 'RELAY NONAKTIF (OPEN)'}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Feedback & Alert Box */}
-          {alertInfo && (
-            <div
-              className={`p-4 rounded-2xl border animate-in fade-in ${
-                alertInfo.type === 'success'
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                  : alertInfo.type === 'danger'
-                  ? 'bg-rose-50 border-rose-200 text-rose-900'
-                  : 'bg-amber-50 border-amber-200 text-amber-900'
-              }`}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                {alertInfo.type === 'success' ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                ) : (
-                  <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
-                )}
-                <h4 className="text-xs sm:text-sm font-black">{alertInfo.title}</h4>
-              </div>
-              <p className="text-xs leading-relaxed opacity-90">{alertInfo.msg}</p>
-              {alertInfo.solution && (
-                <div className="text-xs font-bold mt-2 p-2 rounded-lg bg-white/80 border border-slate-200 text-slate-800">
-                  💡 Solusi: {alertInfo.solution}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Wiring Table & Interactive Controls (Col 5) */}
-        <div className="lg:col-span-5 space-y-4">
-          {/* Box 1: Interactive Wiring Controls */}
-          <div className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs space-y-4">
-            <div className="flex items-center gap-2">
-              <Sliders className="w-4 h-4 text-blue-600" />
-              <h3 className="text-sm font-black text-slate-900">Pengaturan Rangkaian Komponen</h3>
-            </div>
-
-            {/* CONTROLS FOR LED */}
-            {activeLab === 'led' && (
-              <div className="space-y-3">
-                {/* Resistor Switch Toggle */}
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">Resistor Pembatas Arus (220Ω)</div>
-                    <div className="text-[10px] text-slate-500">Mencegah arus berlebih merusak LED</div>
-                  </div>
-                  <button
-                    onClick={() => setLedHasResistor(!ledHasResistor)}
-                    className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${
-                      ledHasResistor ? 'bg-emerald-500' : 'bg-rose-400'
-                    }`}
-                  >
+              {/* Connected Component Box */}
+              <div className="flex-1 w-full max-w-xs bg-white rounded-2xl p-5 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-center shadow-xs min-h-[200px]">
+                {/* PROJECT 1: STREETLIGHT */}
+                {activeProject === 'streetlight' && (
+                  <div className="space-y-3">
                     <div
-                      className={`w-5 h-5 rounded-full bg-white transition-transform absolute top-0.5 shadow-xs ${
-                        ledHasResistor ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                {/* Target Pin Selection */}
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Pin Sinyal ESP32:</label>
-                  <select
-                    value={ledPin}
-                    onChange={(e) => setLedPin(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="GPIO 18">GPIO 18 (PWM Pin)</option>
-                    <option value="GPIO 2">GPIO 2 (Onboard LED Pin)</option>
-                    <option value="GPIO 4">GPIO 4 (General IO)</option>
-                  </select>
-                </div>
-
-                {/* Action Button */}
-                <button
-                  onClick={handleToggleLed}
-                  className={`w-full py-3 rounded-xl font-bold text-xs sm:text-sm text-white flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
-                    ledPowerState
-                      ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/25'
-                      : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/25'
-                  }`}
-                >
-                  <Zap className="w-4 h-4 fill-white" />
-                  <span>{ledPowerState ? 'Matikan Lampu LED' : 'Nyalakan Lampu LED (Uji Rangkaian)'}</span>
-                </button>
-              </div>
-            )}
-
-            {/* CONTROLS FOR DHT22 */}
-            {activeLab === 'dht22' && (
-              <div className="space-y-3">
-                {/* Voltage Input Choice */}
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Tegangan Daya (VCC):</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => setDhtVoltage('3.3V')}
-                      className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        dhtVoltage === '3.3V'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                      className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center transition-all ${
+                        ledPinState
+                          ? 'bg-amber-400 shadow-2xl shadow-amber-400/80 ring-8 ring-amber-200'
+                          : 'bg-slate-100 border-2 border-slate-300'
                       }`}
                     >
-                      3.3V (Disarankan)
-                    </button>
-                    <button
-                      onClick={() => setDhtVoltage('5V')}
-                      className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        dhtVoltage === '5V'
-                          ? 'bg-rose-600 text-white'
-                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                      <Zap
+                        className={`w-10 h-10 ${
+                          ledPinState ? 'text-amber-900 fill-amber-900 animate-pulse' : 'text-slate-400'
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-slate-900">Lampu Penerangan Jalan (LED)</h4>
+                      <p className="text-[11px] text-slate-500">
+                        Status Sinyal GPIO 18: <strong>{ledPinState ? 'HIGH (3.3V)' : 'LOW (0V)'}</strong>
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-block px-3 py-1 rounded-full text-xs font-black ${
+                        ledPinState ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500'
                       }`}
                     >
-                      5V (Beresiko)
-                    </button>
+                      {ledPinState ? 'LAMPU MENYALA (Malam Hari)' : 'LAMPU PADAM (Siang Hari)'}
+                    </span>
                   </div>
-                </div>
+                )}
 
-                {/* Data Pin Choice */}
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Pin Komunikasi Data:</label>
-                  <select
-                    value={dhtPin}
-                    onChange={(e) => setDhtPin(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
+                {/* PROJECT 2: SERVER OVERHEAT ALARM */}
+                {activeProject === 'server-alarm' && (
+                  <div className="space-y-3">
+                    <div
+                      className={`w-20 h-20 rounded-2xl mx-auto flex items-center justify-center transition-all ${
+                        buzzerAlert
+                          ? 'bg-rose-500 shadow-2xl shadow-rose-500/80 ring-8 ring-rose-200 animate-bounce'
+                          : 'bg-emerald-100 border-2 border-emerald-300'
+                      }`}
+                    >
+                      <AlertTriangle
+                        className={`w-10 h-10 ${buzzerAlert ? 'text-white' : 'text-emerald-600'}`}
+                      />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-slate-900">Buzzer Peringatan Ruang Server</h4>
+                      <p className="text-[11px] text-slate-500">
+                        Suhu Terukur: <strong>{serverTemp}°C</strong> (Ambang Batas: 32°C)
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-block px-3 py-1 rounded-full text-xs font-black ${
+                        buzzerAlert ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'
+                      }`}
+                    >
+                      {buzzerAlert ? '⚠️ ALARM BERBUNYI (Buzzer ON)' : 'SUHU AMAN & NORMAL'}
+                    </span>
+                  </div>
+                )}
+
+                {/* PROJECT 3: SMART GARDEN PUMP */}
+                {activeProject === 'smart-garden' && (
+                  <div className="space-y-3">
+                    <div
+                      className={`w-20 h-20 rounded-2xl mx-auto flex items-center justify-center transition-all ${
+                        pumpRelayState
+                          ? 'bg-blue-600 shadow-2xl shadow-blue-500/80 ring-8 ring-blue-200'
+                          : 'bg-slate-100 border-2 border-slate-300'
+                      }`}
+                    >
+                      <Power
+                        className={`w-10 h-10 ${pumpRelayState ? 'text-white' : 'text-slate-400'}`}
+                      />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-slate-900">Modul Relay & Pompa Air 220V</h4>
+                      <p className="text-[11px] text-slate-500">
+                        Kelembaban Tanah: <strong>{soilMoisture}%</strong> (Batas Kering: &lt; 30%)
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-block px-3 py-1 rounded-full text-xs font-black ${
+                        pumpRelayState ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      {pumpRelayState ? 'RELAY KLIK! POMPA MENYIRAM' : 'POMPA AIR STANDBY'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Serial Monitor Live Terminal */}
+            <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800 font-mono text-xs text-slate-300 space-y-1">
+              <div className="flex items-center justify-between text-slate-500 pb-2 border-b border-slate-800 text-[11px]">
+                <div className="flex items-center gap-1.5">
+                  <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>ESP32 Serial Monitor (COM4 @ 115200 baud)</span>
+                </div>
+                <span className="text-emerald-400 font-bold">Online</span>
+              </div>
+              <div className="h-28 overflow-y-auto space-y-1 pt-1">
+                {serialLogs.map((log, idx) => (
+                  <div
+                    key={idx}
+                    className={`leading-relaxed ${
+                      log.includes('GELAP') || log.includes('OVERHEAT') || log.includes('KERING')
+                        ? 'text-amber-400 font-bold'
+                        : 'text-slate-300'
+                    }`}
                   >
-                    <option value="GPIO 4">GPIO 4 (1-Wire Bus)</option>
-                    <option value="GPIO 15">GPIO 15</option>
-                  </select>
-                </div>
-
-                {/* Read Button */}
-                <button
-                  onClick={handleReadDht}
-                  className="w-full py-3 rounded-xl font-bold text-xs sm:text-sm text-white bg-teal-600 hover:bg-teal-700 shadow-md shadow-teal-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
-                >
-                  <Activity className="w-4 h-4" />
-                  <span>Baca Sensor Suhu & Kelembaban</span>
-                </button>
+                    {log}
+                  </div>
+                ))}
               </div>
-            )}
-
-            {/* CONTROLS FOR RELAY */}
-            {activeLab === 'relay' && (
-              <div className="space-y-3">
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Modul relay bertindak sebagai saklar elektrik terisolasi (optocoupler) untuk mengontrol lampu rumah AC 220V dari tegangan rendah ESP32.
-                </p>
-
-                <button
-                  onClick={handleToggleRelay}
-                  className={`w-full py-3 rounded-xl font-bold text-xs sm:text-sm text-white flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
-                    relayTrigger
-                      ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/25'
-                      : 'bg-slate-800 hover:bg-slate-900 shadow-slate-800/25'
-                  }`}
-                >
-                  <Power className="w-4 h-4" />
-                  <span>{relayTrigger ? 'Lepas Relay (OFF)' : 'Picu Sinyal Relay (ON)'}</span>
-                </button>
-              </div>
-            )}
+            </div>
           </div>
 
-          {/* Box 2: Tabel Panduan Kaki & Kabel (Wiring Table Guide) */}
-          <div className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs space-y-3">
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-emerald-600" />
-              <h3 className="text-sm font-black text-slate-900">Tabel Jalur Kabel (Wiring Guide)</h3>
-            </div>
+          {/* Interactive Variable Controls (Col 5) */}
+          <div className="lg:col-span-5 space-y-4">
+            <div className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs space-y-4">
+              <div className="flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-blue-600" />
+                <h3 className="text-sm font-black text-slate-900">Uji Variabel Lingkungan Nyata</h3>
+              </div>
 
-            <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
-              <table className="w-full text-left">
-                <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
-                  <tr>
-                    <th className="p-2.5">Kaki Komponen</th>
-                    <th className="p-2.5">Pin ESP32</th>
-                    <th className="p-2.5">Warna Kabel</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                  {activeLab === 'led' && (
-                    <>
-                      <tr>
-                        <td className="p-2.5 font-bold">Kaki Panjang (Anoda +)</td>
-                        <td className="p-2.5 font-mono">GPIO 18 (+ Resistor)</td>
-                        <td className="p-2.5"><span className="text-blue-600 font-bold">🔴 Merah / Biru</span></td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 font-bold">Kaki Pendek (Katoda -)</td>
-                        <td className="p-2.5 font-mono">GND (Ground)</td>
-                        <td className="p-2.5"><span className="text-slate-800 font-bold">⚫ Hitam</span></td>
-                      </tr>
-                    </>
-                  )}
+              {/* PROJECT 1 SLIDER */}
+              {activeProject === 'streetlight' && (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-700 mb-1">
+                      <span>Tingkat Cahaya Sekitar (Sensor LDR):</span>
+                      <span className="font-mono text-blue-600">ADC {lightAmbient}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="100"
+                      max="4000"
+                      step="50"
+                      value={lightAmbient}
+                      onChange={(e) => setLightAmbient(parseInt(e.target.value, 10))}
+                      className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                    <div className="flex justify-between text-[10px] text-slate-400 mt-1 font-bold">
+                      <span>Malam Hari (Gelap)</span>
+                      <span>Batas Ambang (1200)</span>
+                      <span>Siang Terik (Terang)</span>
+                    </div>
+                  </div>
 
-                  {activeLab === 'dht22' && (
-                    <>
-                      <tr>
-                        <td className="p-2.5 font-bold">Pin 1 (VCC)</td>
-                        <td className="p-2.5 font-mono">3V3 (3.3V)</td>
-                        <td className="p-2.5"><span className="text-rose-600 font-bold">🔴 Merah</span></td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 font-bold">Pin 2 (DATA)</td>
-                        <td className="p-2.5 font-mono">GPIO 4</td>
-                        <td className="p-2.5"><span className="text-teal-600 font-bold">🟢 Hijau</span></td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 font-bold">Pin 4 (GND)</td>
-                        <td className="p-2.5 font-mono">GND</td>
-                        <td className="p-2.5"><span className="text-slate-800 font-bold">⚫ Hitam</span></td>
-                      </tr>
-                    </>
-                  )}
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 leading-relaxed">
+                    💡 <strong>Ilmu Penting:</strong> Sensor LDR mengubah resistansi berdasarkan cahaya. Ketika gelap, resistansi LDR melonjak sehingga nilai ADC turun di bawah 1200. ESP32 membaca ini via pin GPIO 34 dan menyalakan lampu secara otomatis!
+                  </div>
+                </div>
+              )}
 
-                  {activeLab === 'relay' && (
-                    <>
-                      <tr>
-                        <td className="p-2.5 font-bold">Pin VCC</td>
-                        <td className="p-2.5 font-mono">VIN (5V)</td>
-                        <td className="p-2.5"><span className="text-rose-600 font-bold">🔴 Merah</span></td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 font-bold">Pin IN (Signal)</td>
-                        <td className="p-2.5 font-mono">GPIO 23</td>
-                        <td className="p-2.5"><span className="text-amber-600 font-bold">🟡 Kuning</span></td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 font-bold">Pin GND</td>
-                        <td className="p-2.5 font-mono">GND</td>
-                        <td className="p-2.5"><span className="text-slate-800 font-bold">⚫ Hitam</span></td>
-                      </tr>
-                    </>
-                  )}
-                </tbody>
-              </table>
-            </div>
+              {/* PROJECT 2 SLIDER */}
+              {activeProject === 'server-alarm' && (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-700 mb-1">
+                      <span>Suhu Ruang Rak Server (DHT22):</span>
+                      <span className="font-mono text-rose-600">{serverTemp}°C</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="18"
+                      max="45"
+                      step="1"
+                      value={serverTemp}
+                      onChange={(e) => setServerTemp(parseInt(e.target.value, 10))}
+                      className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-600"
+                    />
+                    <div className="flex justify-between text-[10px] text-slate-400 mt-1 font-bold">
+                      <span>Dingin (18°C)</span>
+                      <span>Batas Kritis (32°C)</span>
+                      <span>Overheat (45°C)</span>
+                    </div>
+                  </div>
 
-            <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-800 leading-relaxed">
-              💡 <strong>Tips SIJA:</strong> Selalu gunakan kabel warna hitam untuk GND dan merah untuk VCC agar kamu tidak salah colok saat praktikum perangkat keras di lab sekolah.
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 leading-relaxed">
+                    💡 <strong>Ilmu Penting:</strong> Server data center wajib berada pada suhu 18°C - 27°C. Ketika AC ruangan mati dan suhu menembus 32°C, ESP32 membunyikan alarm piezo buzzer agar teknisi sigap mencegah kerusakan CPU server!
+                  </div>
+                </div>
+              )}
+
+              {/* PROJECT 3 SLIDER */}
+              {activeProject === 'smart-garden' && (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-700 mb-1">
+                      <span>Kelembaban Tanah (Soil Moisture):</span>
+                      <span className="font-mono text-emerald-600">{soilMoisture}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="5"
+                      max="95"
+                      step="1"
+                      value={soilMoisture}
+                      onChange={(e) => setSoilMoisture(parseInt(e.target.value, 10))}
+                      className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                    />
+                    <div className="flex justify-between text-[10px] text-slate-400 mt-1 font-bold">
+                      <span>Kering Kritis (5%)</span>
+                      <span>Batas Siram (30%)</span>
+                      <span>Basah Lembab (95%)</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 leading-relaxed">
+                    💡 <strong>Ilmu Penting:</strong> Mikrokontroler 3.3V tidak bisa langsung menyalakan pompa air 220V AC. Karena itu digunakan <strong>Modul Relay</strong> ber-optocoupler sebagai saklar isolator elektromagnetik yang aman.
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* 4. CODE VIEW (Belajar Kode Arduino Nyata) */}
+      {activeTab === 'code' && (
+        <div className="bg-slate-950 rounded-3xl p-6 border border-slate-800 shadow-xl text-slate-200 font-mono text-xs space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <Code className="w-4 h-4 text-emerald-400" />
+              <span className="font-bold text-slate-100">Kode Skrip Arduino IDE (ESP32 C++)</span>
+            </div>
+            <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded">firmware.ino</span>
+          </div>
+
+          <pre className="whitespace-pre-wrap leading-relaxed text-slate-300">
+            {activeProject === 'streetlight' && `// Proyek 1: Otomasi Lampu Jalan ESP32 + Sensor LDR
+const int ldrPin = 34;   // Pin Analog ADC untuk sensor LDR
+const int ledPin = 18;   // Pin Digital PWM untuk Lampu LED
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(ledPin, OUTPUT);
+}
+
+void loop() {
+  int ldrValue = analogRead(ldrPin); // Membaca nilai 0 - 4095
+  Serial.print("Nilai Sensor Cahaya: ");
+  Serial.println(ldrValue);
+
+  // Jika nilai ADC di bawah 1200 (kondisi gelap / malam hari)
+  if (ldrValue < 1200) {
+    digitalWrite(ledPin, HIGH); // Nyalakan lampu
+  } else {
+    digitalWrite(ledPin, LOW);  // Padamkan lampu di siang hari
+  }
+  delay(1000);
+}`}
+
+            {activeProject === 'server-alarm' && `// Proyek 2: Alarm Overheat Server ESP32 + DHT22 + Buzzer
+#include "DHT.h"
+#define DHTPIN 4
+#define DHTTYPE DHT22
+#define BUZZER_PIN 21
+
+DHT dht(DHTPIN, DHTTYPE);
+
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+  pinMode(BUZZER_PIN, OUTPUT);
+}
+
+void loop() {
+  float suhu = dht.readTemperature();
+  Serial.print("Suhu Server: ");
+  Serial.print(suhu);
+  Serial.println(" *C");
+
+  // Jika suhu melewati ambang kritis 32 Derajat Celsius
+  if (suhu > 32.0) {
+    tone(BUZZER_PIN, 1000); // Bunyikan alarm buzzer 1kHz
+  } else {
+    noTone(BUZZER_PIN);     // Matikan alarm jika suhu aman
+  }
+  delay(2000);
+}`}
+
+            {activeProject === 'smart-garden' && `// Proyek 3: Smart Garden Otomatis ESP32 + Relay Pompa 220V
+const int sensorPin = 32; // Pin Analog Soil Moisture
+const int relayPin = 23;  // Pin Digital Pengendali Relay (Active LOW)
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, HIGH); // Standby OFF
+}
+
+void loop() {
+  int nilaiSensor = analogRead(sensorPin);
+  int persenKelembaban = map(nilaiSensor, 4095, 1500, 0, 100);
+
+  Serial.print("Kelembaban Tanah: ");
+  Serial.print(persenKelembaban);
+  Serial.println("%");
+
+  // Jika kelembaban tanah di bawah 30% (Kering)
+  if (persenKelembaban < 30) {
+    digitalWrite(relayPin, LOW);  // Picu relay menyalakan pompa air
+  } else {
+    digitalWrite(relayPin, HIGH); // Matikan pompa air
+  }
+  delay(3000);
+}`}
+          </pre>
+        </div>
+      )}
+
+      {/* 5. WIRING SCHEMATIC PINOUT VIEW */}
+      {activeTab === 'wiring' && (
+        <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-xs space-y-4">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-blue-600" />
+            <h3 className="text-sm font-black text-slate-900">Tabel Pinout Kabel Lengkap</h3>
+          </div>
+
+          <div className="border border-slate-200 rounded-2xl overflow-hidden text-xs">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="p-3">Nama Komponen</th>
+                  <th className="p-3">Pin Komponen</th>
+                  <th className="p-3">Pin ESP32</th>
+                  <th className="p-3">Warna Kabel Standar</th>
+                  <th className="p-3">Fungsi Teknis</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                {activeProject === 'streetlight' && (
+                  <>
+                    <tr>
+                      <td className="p-3 font-bold">Sensor LDR</td>
+                      <td className="p-3">Kaki 1</td>
+                      <td className="p-3 font-mono font-bold text-blue-600">3V3</td>
+                      <td className="p-3">🔴 Merah</td>
+                      <td className="p-3">Tegangan referensi pembagi arus</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 font-bold">Sensor LDR</td>
+                      <td className="p-3">Kaki 2 (+ Resistor 10kΩ)</td>
+                      <td className="p-3 font-mono font-bold text-blue-600">GPIO 34 (ADC)</td>
+                      <td className="p-3">🟡 Kuning</td>
+                      <td className="p-3">Sinyal analog tegangan berubah-ubah</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 font-bold">Lampu LED</td>
+                      <td className="p-3">Kaki Anoda (+ Resistor 220Ω)</td>
+                      <td className="p-3 font-mono font-bold text-blue-600">GPIO 18 (PWM)</td>
+                      <td className="p-3">🟢 Hijau</td>
+                      <td className="p-3">Sinyal digital pengaktif lampu</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 font-bold">Semua GND</td>
+                      <td className="p-3">Katoda LED & Ground Resistor</td>
+                      <td className="p-3 font-mono font-bold text-blue-600">GND</td>
+                      <td className="p-3">⚫ Hitam</td>
+                      <td className="p-3">Jalur netral penutup sirkuit</td>
+                    </tr>
+                  </>
+                )}
+
+                {activeProject === 'server-alarm' && (
+                  <>
+                    <tr>
+                      <td className="p-3 font-bold">Sensor DHT22</td>
+                      <td className="p-3">Pin 1 (VCC)</td>
+                      <td className="p-3 font-mono font-bold text-blue-600">3V3</td>
+                      <td className="p-3">🔴 Merah</td>
+                      <td className="p-3">Daya operasional logika 3.3V</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 font-bold">Sensor DHT22</td>
+                      <td className="p-3">Pin 2 (DATA)</td>
+                      <td className="p-3 font-mono font-bold text-blue-600">GPIO 4</td>
+                      <td className="p-3">🟡 Kuning</td>
+                      <td className="p-3">Komunikasi digital 1-Wire</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 font-bold">Piezo Buzzer</td>
+                      <td className="p-3">Kutub Positif (+)</td>
+                      <td className="p-3 font-mono font-bold text-blue-600">GPIO 21</td>
+                      <td className="p-3">🟢 Hijau</td>
+                      <td className="p-3">Frekuensi nada PWM 1000 Hz</td>
+                    </tr>
+                  </>
+                )}
+
+                {activeProject === 'smart-garden' && (
+                  <>
+                    <tr>
+                      <td className="p-3 font-bold">Soil Moisture</td>
+                      <td className="p-3">Pin A0 (Analog)</td>
+                      <td className="p-3 font-mono font-bold text-blue-600">GPIO 32 (ADC)</td>
+                      <td className="p-3">🟡 Kuning</td>
+                      <td className="p-3">Membaca kadar air tanah</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 font-bold">Modul Relay</td>
+                      <td className="p-3">Pin IN (Signal)</td>
+                      <td className="p-3 font-mono font-bold text-blue-600">GPIO 23</td>
+                      <td className="p-3">🟢 Hijau</td>
+                      <td className="p-3">Memicu koil saklar optocoupler</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 font-bold">Modul Relay</td>
+                      <td className="p-3">Terminal NO (Normally Open)</td>
+                      <td className="p-3 font-mono text-slate-500">Kabel Fasa AC 220V</td>
+                      <td className="p-3">🟤 Cokelat AC</td>
+                      <td className="p-3">Saklar daya pompa air listrik</td>
+                    </tr>
+                  </>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
