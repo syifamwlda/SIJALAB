@@ -14,7 +14,17 @@ export const AppProvider = ({ children }) => {
   const [userProfile, setUserProfile] = useState(() => {
     const saved = localStorage.getItem('sijalab_user_profile');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.name === 'Syifa Maulida' || !parsed.name) {
+          parsed.name = 'Aditya Pratama';
+          parsed.avatarUrl = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80';
+          localStorage.setItem('sijalab_user_profile', JSON.stringify(parsed));
+        }
+        return parsed;
+      } catch (e) {
+        console.error(e);
+      }
     }
     return INITIAL_USER_PROFILE;
   });

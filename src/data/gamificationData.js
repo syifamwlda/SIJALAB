@@ -1,11 +1,11 @@
 // SIJALAB Gamification & User State Data
 
 export const INITIAL_USER_PROFILE = {
-  name: 'Syifa Maulida',
+  name: 'Aditya Pratama',
   nisn: '0078921443',
   schoolClass: 'XII SIJA 1',
   major: 'Sistem Informatika, Jaringan, dan Aplikasi',
-  avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+  avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80',
   bio: 'Siswa SMK SIJA yang antusias di bidang Network Infrastructure, Cloud Computing, dan Embedded IoT System.',
   joinedDate: 'Juli 2024',
   xp: 320,
@@ -106,7 +106,7 @@ export const DEMO_LEADERBOARD = [
   { rank: 1, name: 'Fikri Haikal', class: 'XII SIJA 1', xp: 1480, streak: 14, avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80', badge: 'Cloud Architect' },
   { rank: 2, name: 'Alya Rahmadhani', class: 'XII SIJA 2', xp: 1210, streak: 9, avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80', badge: 'IoT Specialist' },
   { rank: 3, name: 'Bima Satria', class: 'XII SIJA 1', xp: 950, streak: 7, avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=100&auto=format&fit=crop&q=80', badge: 'IoT Specialist' },
-  { rank: 4, name: 'Syifa Maulida (Kamu)', class: 'XII SIJA 1', xp: 320, streak: 5, avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80', isCurrentUser: true, badge: 'Network Cadet' },
+  { rank: 4, name: 'Aditya Pratama (Kamu)', class: 'XII SIJA 1', xp: 320, streak: 5, avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80', isCurrentUser: true, badge: 'Network Cadet' },
   { rank: 5, name: 'Dimas Prasetyo', class: 'XI SIJA 1', xp: 280, streak: 3, avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80', badge: 'Novice SysAdmin' },
   { rank: 6, name: 'Zahra Nabila', class: 'XI SIJA 2', xp: 210, streak: 4, avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&auto=format&fit=crop&q=80', badge: 'Novice SysAdmin' }
 ];

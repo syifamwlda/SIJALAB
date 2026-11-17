@@ -136,11 +136,11 @@ export const DashboardView = () => {
           <div className="space-y-3 max-w-xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 border border-blue-200/80 rounded-full text-xs font-bold text-blue-700">
               <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-              <span>Digital Learning Universe • XII SIJA 1</span>
+              <span>Digital Learning Universe • {userProfile.name} ({userProfile.schoolClass})</span>
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight">
-              Selamat Datang Kembali, {userProfile.name.split(' ')[0]}! 👋
+              Halo, Rekan SIJA! Siap Praktik Hari Ini? ⚡
             </h1>
 
             <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
