@@ -13,7 +13,8 @@ import {
   ArrowRight,
   ShieldCheck,
   Zap,
-  Play
+  Play,
+  BookOpen
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { CliTerminalSimulator } from './sub/CliTerminalSimulator';
