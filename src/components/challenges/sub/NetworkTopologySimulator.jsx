@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Server,
   Laptop,
@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   XCircle,
   Sparkles,
-  SlidersHorizontal,
   Info,
   Radio,
   Layers,
@@ -21,691 +20,539 @@ import {
   Activity,
   Check,
   AlertTriangle,
-  FileCode,
-  Terminal
+  Lightbulb,
+  HelpCircle,
+  ChevronRight,
+  Zap,
+  BookOpen
 } from 'lucide-react';
 import { useApp } from '../../../context/AppContext';
-
-// Initial Topology Data
-const INITIAL_VLANS = [
-  { id: 10, name: 'SISWA_LAB', subnet: '192.168.10.0/24', color: 'border-blue-500 text-blue-600 bg-blue-50', badgeColor: 'bg-blue-600' },
-  { id: 20, name: 'GURU_STAFF', subnet: '192.168.20.0/24', color: 'border-purple-500 text-purple-600 bg-purple-50', badgeColor: 'bg-purple-600' },
-  { id: 30, name: 'SERVER_CBT', subnet: '192.168.30.0/24', color: 'border-emerald-500 text-emerald-600 bg-emerald-50', badgeColor: 'bg-emerald-600' }
-];
 
 export const NetworkTopologySimulator = () => {
   const { addXP, showToast } = useApp();
 
-  // Active sub-mode: 'test' (End Devices), 'switching' (VLAN & Ports), 'routing' (Router-on-a-Stick)
-  const [activeTab, setActiveTab] = useState('test');
+  // Active view: 'guide' (Panduan Belajar), 'simulator' (Praktik Topologi), 'theory' (Kamus Konsep)
+  const [activeTab, setActiveTab] = useState('simulator');
 
-  // Switching Config State
-  const [switchPorts, setSwitchPorts] = useState({
-    'Fa0/1': { mode: 'access', vlan: 10, device: 'pc1', label: 'PC-1 (Siswa)' },
-    'Fa0/2': { mode: 'access', vlan: 20, device: 'pc2', label: 'PC-2 (Guru)' },
-    'Fa0/3': { mode: 'access', vlan: 30, device: 'server', label: 'Server CBT' },
-    'Gi0/1': { mode: 'trunk', allowedVlans: [10, 20, 30], device: 'router', label: 'Uplink Router' }
-  });
+  // Guided Steps State for Beginner Friendly Learning
+  const [activeStep, setActiveStep] = useState(1);
 
-  // Routing Config State (Router-on-a-Stick)
-  const [interVlanRoutingEnabled, setInterVlanRoutingEnabled] = useState(true);
-  const [subInterfaces, setSubInterfaces] = useState({
-    'Gi0/0.10': { vlan: 10, ip: '192.168.10.1', status: 'up' },
-    'Gi0/0.20': { vlan: 20, ip: '192.168.20.1', status: 'up' },
-    'Gi0/0.30': { vlan: 30, ip: '192.168.30.1', status: 'up' }
-  });
+  // Network State
+  const [interVlanRouting, setInterVlanRouting] = useState(true);
+  const [pc1Vlan, setPc1Vlan] = useState(10); // 10 (Siswa)
+  const [pc2Vlan, setPc2Vlan] = useState(20); // 20 (Guru)
+  const [serverVlan, setServerVlan] = useState(30); // 30 (Server Farm CBT)
 
-  // End Devices State
-  const [devices, setDevices] = useState({
-    pc1: {
-      id: 'pc1',
-      name: 'PC-1 Siswa',
-      ip: '192.168.10.15',
-      subnet: '255.255.255.0',
-      gateway: '192.168.10.1',
-      vlan: 10,
-      port: 'Fa0/1',
-      icon: Laptop,
-      color: 'bg-blue-600'
-    },
-    pc2: {
-      id: 'pc2',
-      name: 'PC-2 Guru',
-      ip: '192.168.20.25',
-      subnet: '255.255.255.0',
-      gateway: '192.168.20.1',
-      vlan: 20,
-      port: 'Fa0/2',
-      icon: Laptop,
-      color: 'bg-purple-600'
-    },
-    server: {
-      id: 'server',
-      name: 'Web Server CBT',
-      ip: '192.168.30.100',
-      subnet: '255.255.255.0',
-      gateway: '192.168.30.1',
-      vlan: 30,
-      port: 'Fa0/3',
-      icon: Server,
-      color: 'bg-emerald-600'
-    }
-  });
+  // Simulation State
+  const [testMode, setTestMode] = useState('ping'); // 'ping', 'http'
+  const [simSource, setSimSource] = useState('pc1'); // 'pc1', 'pc2'
+  const [simTarget, setSimTarget] = useState('server'); // 'server', 'pc2'
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simulationResult, setSimulationResult] = useState(null);
+  const [animatedHop, setAnimatedHop] = useState(0); // 0 = idle, 1 = pc, 2 = switch, 3 = router, 4 = dest
 
-  // Test Station State
-  const [testType, setTestType] = useState('ping'); // 'ping', 'http', 'dhcp'
-  const [testSource, setTestSource] = useState('pc1');
-  const [testTarget, setTestTarget] = useState('server');
-  const [isTesting, setIsTesting] = useState(false);
-  const [testLogs, setTestLogs] = useState([]);
-  const [testResult, setTestResult] = useState(null); // 'success', 'failed'
-  const [packetStep, setPacketStep] = useState(0); // For packet animation
+  const runSimulation = () => {
+    setIsSimulating(true);
+    setSimulationResult(null);
+    setAnimatedHop(1);
 
-  // Run Test (Ping, HTTP, DHCP)
-  const handleRunTest = () => {
-    setIsTesting(true);
-    setTestLogs([]);
-    setTestResult(null);
-    setPacketStep(1);
-
-    const src = devices[testSource];
-    const dst = devices[testTarget];
-    const srcPort = switchPorts[src.port];
-    const dstPort = switchPorts[dst.port];
-    const isSameVlan = srcPort.vlan === dstPort.vlan;
-
-    const logs = [];
-
-    // Step 1: Packet initiation
-    logs.push(`[1/4] Menginisialisasi paket ${testType.toUpperCase()} dari ${src.name} (${src.ip})...`);
+    const srcVlan = simSource === 'pc1' ? pc1Vlan : pc2Vlan;
+    const dstVlan = simTarget === 'server' ? serverVlan : (simTarget === 'pc2' ? pc2Vlan : pc1Vlan);
+    const isSameVlan = srcVlan === dstVlan;
 
     setTimeout(() => {
-      setPacketStep(2);
-      // Step 2: Switch Layer 2 Inspection
-      if (srcPort.mode !== 'access' && srcPort.mode !== 'trunk') {
-        logs.push(`[2/4] [GAGAL] Port switch ${src.port} dalam status shutdown/mati.`);
-        finishTest(false, logs);
-        return;
-      }
-
-      logs.push(`[2/4] Paket memasuki Switch Catalyst pada port ${src.port} (VLAN ${srcPort.vlan}).`);
+      setAnimatedHop(2); // In Switch
 
       setTimeout(() => {
-        setPacketStep(3);
-        // Step 3: Layer 2 vs Layer 3 Routing
-        if (testType === 'dhcp') {
-          // DHCP Test
-          logs.push(`[3/4] DHCP DISCOVER broadcast dikirim via VLAN ${srcPort.vlan}...`);
-          logs.push(`[3/4] Router-on-a-Stick DHCP Relay menyambut permintaan...`);
-          setTimeout(() => {
-            setPacketStep(4);
-            logs.push(`[4/4] DHCP OFFER & ACK diterima! IP berhasil diperbarui secara otomatis.`);
-            finishTest(true, logs);
-          }, 600);
-          return;
-        }
-
         if (isSameVlan) {
-          // Same VLAN switching
-          logs.push(`[3/4] Tujuan berada dalam VLAN yang sama (${srcPort.vlan}). Switching langsung via MAC table.`);
-          setTimeout(() => {
-            setPacketStep(4);
-            if (testType === 'http') {
-              logs.push(`[4/4] HTTP 200 OK — Halaman Web Portal CBT berhasil dimuat!`);
-            } else {
-              logs.push(`[4/4] Ping Berhasil! 4 packets transmitted, 4 received, 0% packet loss, RTT 0.8ms.`);
-            }
-            finishTest(true, logs);
-          }, 600);
+          // Packet stays within switch
+          setAnimatedHop(4); // Straight to destination
+          setIsSimulating(false);
+          setSimulationResult({
+            success: true,
+            title: testMode === 'http' ? 'HTTP 200 OK — Halaman Web Terbuka!' : 'Ping Berhasil (1 VLAN)!',
+            explanation: `Kedua perangkat sama-sama berada di VLAN ${srcVlan}. Switch langsung meneruskan paket lewat alamat MAC tanpa memerlukan bantuan router.`,
+            latency: '0.4 ms',
+            path: ['PC Pengirim', `Switch (VLAN ${srcVlan})`, 'Perangkat Tujuan']
+          });
+          addXP(25);
+          if (showToast) showToast('Simulasi Berhasil! (+25 XP)', 'success');
         } else {
-          // Inter-VLAN Routing required
-          logs.push(`[3/4] Perbedaan VLAN terdeteksi (VLAN ${srcPort.vlan} -> VLAN ${dstPort.vlan}). Meneruskan ke 802.1Q Trunk (Gi0/1)...`);
-
-          if (!interVlanRoutingEnabled) {
-            logs.push(`[4/4] [GAGAL] Inter-VLAN Routing pada Router nonaktif! Paket di-drop.`);
-            logs.push(`[SOLUSI] Aktifkan Inter-VLAN Routing pada tab "Routing (L3)" agar router dapat menjembatani sub-interface.`);
-            finishTest(false, logs);
-            return;
+          // Cross-VLAN
+          if (!interVlanRouting) {
+            // Fails at router
+            setAnimatedHop(3);
+            setIsSimulating(false);
+            setSimulationResult({
+              success: false,
+              title: 'Paket Terisolasi / Gagal (Packet Dropped)!',
+              explanation: `PC berada di VLAN ${srcVlan} sedangkan server berada di VLAN ${dstVlan}. Karena fitur Router-on-a-Stick nonaktif, paket tidak dapat melompati batas VLAN. Ini adalah fungsi keamanan isolasi VLAN.`,
+              solution: 'Nyalakan toggle "Router-on-a-Stick" di panel sebelah kanan agar router merutekan paket antar-VLAN.',
+              path: ['PC Pengirim', `Switch (VLAN ${srcVlan})`, '❌ Router (Routing OFF)']
+            });
+          } else {
+            // Success via Router-on-a-Stick
+            setAnimatedHop(3); // In Router
+            setTimeout(() => {
+              setAnimatedHop(4); // Destination
+              setIsSimulating(false);
+              setSimulationResult({
+                success: true,
+                title: testMode === 'http' ? 'HTTP 200 OK — Portal CBT Terbuka!' : 'Ping Lintas VLAN Berhasil!',
+                explanation: `Paket dari VLAN ${srcVlan} dikirim lewat kabel Trunk (802.1Q) ke Router sub-interface Gi0/0.${srcVlan}. Router kemudian merutekannya ke sub-interface Gi0/0.${dstVlan} dan diteruskan kembali ke switch menuju tujuan!`,
+                latency: '1.2 ms',
+                path: ['PC Pengirim', `Switch (Port Access VLAN ${srcVlan})`, 'Trunk 802.1Q', `Router (Gi0/0.${srcVlan} -> Gi0/0.${dstVlan})`, 'Switch', 'Server Tujuan']
+              });
+              addXP(35);
+              if (showToast) showToast('Inter-VLAN Routing Berhasil! (+35 XP)', 'success');
+            }, 600);
           }
-
-          // Check subinterfaces
-          const srcSub = subInterfaces[`Gi0/0.${srcPort.vlan}`];
-          const dstSub = subInterfaces[`Gi0/0.${dstPort.vlan}`];
-
-          if (!srcSub || !dstSub || srcSub.status !== 'up' || dstSub.status !== 'up') {
-            logs.push(`[4/4] [GAGAL] Sub-interface router Gi0/0.${srcPort.vlan} atau Gi0/0.${dstPort.vlan} down.`);
-            finishTest(false, logs);
-            return;
-          }
-
-          setTimeout(() => {
-            setPacketStep(4);
-            logs.push(`[3.5/4] Router membongkar tag 802.1Q, merutekan paket dari Gi0/0.${srcPort.vlan} ke Gi0/0.${dstPort.vlan}.`);
-            if (testType === 'http') {
-              logs.push(`[4/4] [SUKSES] HTTP/1.1 200 OK — Web Server CBT ${dst.ip} berhasil diakses dari ${src.name}!`);
-            } else {
-              logs.push(`[4/4] [SUKSES] Ping Lintas-VLAN Berhasil! 4 packets transmitted, 4 received, 0% loss, RTT 1.4ms.`);
-            }
-            finishTest(true, logs);
-          }, 700);
         }
-      }, 700);
-    }, 600);
-  };
-
-  const finishTest = (success, logs) => {
-    setTestLogs(logs);
-    setTestResult(success ? 'success' : 'failed');
-    setIsTesting(false);
-    if (success) {
-      addXP(25);
-      if (showToast) showToast('Pengujian Topologi Berhasil! (+25 XP)', 'success');
-    }
-  };
-
-  const updatePortVlan = (portKey, vlanId) => {
-    setSwitchPorts((prev) => ({
-      ...prev,
-      [portKey]: {
-        ...prev[portKey],
-        vlan: parseInt(vlanId, 10)
-      }
-    }));
-    // Sync device vlan
-    const devId = switchPorts[portKey].device;
-    if (devId && devices[devId]) {
-      setDevices((prev) => ({
-        ...prev,
-        [devId]: {
-          ...prev[devId],
-          vlan: parseInt(vlanId, 10)
-        }
-      }));
-    }
+      }, 600);
+    }, 500);
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      {/* 1. HEADER & MODE SWITCHER */}
-      <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-md">
-              <Network className="w-6 h-6 text-cyan-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-black text-slate-900">Interactive Network Topology Lab</h2>
-                <span className="px-2.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-black uppercase rounded-full">
-                  L2 Switching & L3 Routing
-                </span>
-              </div>
-              <p className="text-xs text-slate-600 font-medium">
-                Simulasi jaringan komprehensif: alokasi VLAN port switch, konfigurasi Router-on-a-Stick, serta pengujian end-device (Ping, HTTP, & DHCP).
-              </p>
-            </div>
+      {/* 1. INTRO / EXPLANATION CARD (Membuat Siswa Paham Konteks) */}
+      <div className="bg-linear-to-r from-blue-600 via-indigo-600 to-blue-700 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden">
+        <div className="relative z-10 max-w-3xl space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/15 backdrop-blur-md rounded-full text-xs font-bold text-blue-100">
+            <Lightbulb className="w-3.5 h-3.5 text-amber-300" />
+            <span>Pahami Konsep Jaringan SMK: VLAN & Router-on-a-Stick</span>
           </div>
-
-          {/* Sub-mode Tabs */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200/80">
-            <button
-              onClick={() => setActiveTab('test')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'test'
-                  ? 'bg-white text-blue-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Activity className="w-3.5 h-3.5" />
-              <span>Stasiun Uji End-Device</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('switching')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'switching'
-                  ? 'bg-white text-blue-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Switching (VLAN L2)</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('routing')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'routing'
-                  ? 'bg-white text-blue-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Route className="w-3.5 h-3.5" />
-              <span>Routing (L3 Stick)</span>
-            </button>
-          </div>
-        </div>
-
-        {/* 2. VISUAL TOPOLOGY CANVAS (Interactive Nodes & Links) */}
-        <div className="relative rounded-2xl bg-linear-to-b from-slate-900 via-slate-950 to-slate-900 p-6 border border-slate-800 overflow-hidden shadow-inner min-h-[300px]">
-          {/* Subtle Grid overlay */}
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b15_1px,transparent_1px),linear-gradient(to_bottom,#1e293b15_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
-
-          {/* Top Layer: Router Gateway */}
-          <div className="relative z-10 flex flex-col items-center mb-8">
-            <div className="flex flex-col items-center">
-              <div
-                className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform ${
-                  interVlanRoutingEnabled ? 'bg-indigo-600 shadow-indigo-500/20' : 'bg-slate-700'
-                }`}
-              >
-                <Server className="w-7 h-7" />
-              </div>
-              <span className="text-xs font-black text-white mt-1.5">Router-on-a-Stick</span>
-              <span className="text-[10px] font-mono text-cyan-400">Gi0/0 (802.1Q Trunk)</span>
-              <div className="flex gap-1 mt-1">
-                <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${interVlanRoutingEnabled ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'}`}>
-                  {interVlanRoutingEnabled ? 'Routing: ACTIVE' : 'Routing: OFF'}
-                </span>
-              </div>
-            </div>
-
-            {/* Trunk Cable Animation */}
-            <div className="w-0.5 h-10 bg-linear-to-b from-indigo-500 via-cyan-400 to-teal-500 relative">
-              {isTesting && packetStep === 3 && !isSameVlan && (
-                <div className="absolute left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-cyan-300 animate-ping" />
-              )}
-            </div>
-          </div>
-
-          {/* Middle Layer: Core Switch Catalyst */}
-          <div className="relative z-10 flex flex-col items-center mb-8">
-            <div className="flex flex-col items-center">
-              <div className="w-14 h-14 rounded-2xl bg-teal-600 text-white flex items-center justify-center shadow-lg shadow-teal-500/20">
-                <Network className="w-7 h-7" />
-              </div>
-              <span className="text-xs font-black text-white mt-1.5">Switch Catalyst 2960</span>
-              <div className="flex items-center gap-1.5 mt-1 font-mono text-[10px]">
-                <span className="px-1.5 py-0.2 bg-blue-900/60 text-blue-300 rounded border border-blue-800">Fa0/1: V{switchPorts['Fa0/1'].vlan}</span>
-                <span className="px-1.5 py-0.2 bg-purple-900/60 text-purple-300 rounded border border-purple-800">Fa0/2: V{switchPorts['Fa0/2'].vlan}</span>
-                <span className="px-1.5 py-0.2 bg-emerald-900/60 text-emerald-300 rounded border border-emerald-800">Fa0/3: V{switchPorts['Fa0/3'].vlan}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Layer: End Devices */}
-          <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-6 pt-2">
-            {/* PC-1 */}
-            <div
-              className={`flex flex-col items-center p-3 rounded-2xl border transition-all ${
-                testSource === 'pc1' || testTarget === 'pc1'
-                  ? 'bg-slate-800/90 border-blue-500 shadow-md'
-                  : 'bg-slate-900/60 border-slate-800'
-              }`}
-            >
-              <div className="w-11 h-11 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md">
-                <Laptop className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-bold text-slate-100 mt-2">{devices.pc1.name}</span>
-              <span className="text-[10px] font-mono text-slate-400">{devices.pc1.ip}</span>
-              <span className="text-[9px] font-bold px-2 py-0.5 mt-1 rounded bg-blue-950 text-blue-300 border border-blue-800">
-                VLAN {switchPorts['Fa0/1'].vlan} • Fa0/1
-              </span>
-            </div>
-
-            {/* PC-2 */}
-            <div
-              className={`flex flex-col items-center p-3 rounded-2xl border transition-all ${
-                testSource === 'pc2' || testTarget === 'pc2'
-                  ? 'bg-slate-800/90 border-purple-500 shadow-md'
-                  : 'bg-slate-900/60 border-slate-800'
-              }`}
-            >
-              <div className="w-11 h-11 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-md">
-                <Laptop className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-bold text-slate-100 mt-2">{devices.pc2.name}</span>
-              <span className="text-[10px] font-mono text-slate-400">{devices.pc2.ip}</span>
-              <span className="text-[9px] font-bold px-2 py-0.5 mt-1 rounded bg-purple-950 text-purple-300 border border-purple-800">
-                VLAN {switchPorts['Fa0/2'].vlan} • Fa0/2
-              </span>
-            </div>
-
-            {/* Web Server CBT */}
-            <div
-              className={`flex flex-col items-center p-3 rounded-2xl border transition-all ${
-                testSource === 'server' || testTarget === 'server'
-                  ? 'bg-slate-800/90 border-emerald-500 shadow-md'
-                  : 'bg-slate-900/60 border-slate-800'
-              }`}
-            >
-              <div className="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md">
-                <Server className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-bold text-slate-100 mt-2">{devices.server.name}</span>
-              <span className="text-[10px] font-mono text-slate-400">{devices.server.ip}</span>
-              <span className="text-[9px] font-bold px-2 py-0.5 mt-1 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                VLAN {switchPorts['Fa0/3'].vlan} • Fa0/3
-              </span>
-            </div>
-          </div>
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+            Mengapa Kita Memerlukan Topologi Ini? 🤔
+          </h2>
+          <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed">
+            Di sekolah, kita punya <strong>Lab Siswa (VLAN 10)</strong>, <strong>Ruang Guru (VLAN 20)</strong>, dan <strong>Server Ujian CBT (VLAN 30)</strong>. Agar siswa tidak bisa "iseng" membuka komputer guru, jaringan dipisah dengan <strong>VLAN</strong>. Namun, siswa tetap harus bisa mengerjakan ujian di Server CBT, sehingga dibutuhkan <strong>Router</strong> untuk menghubungkan mereka dengan aman!
+          </p>
         </div>
       </div>
 
-      {/* 3. INTERACTIVE CONTROL PANELS ACCORDING TO ACTIVE TAB */}
-
-      {/* TAB 1: END DEVICES TEST STATION */}
-      {activeTab === 'test' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Test Setup Card (Col 5) */}
-          <div className="lg:col-span-5 bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs space-y-4">
-            <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-blue-600" />
-              <h3 className="text-sm font-black text-slate-900">Uji Konektivitas Antar Perangkat</h3>
-            </div>
-
-            {/* Test Type Selectors */}
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                onClick={() => setTestType('ping')}
-                className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
-                  testType === 'ping'
-                    ? 'border-blue-600 bg-blue-50 text-blue-700 font-bold'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <div className="text-xs font-bold">Ping ICMP</div>
-                <div className="text-[10px] text-slate-500">Echo Request</div>
-              </button>
-
-              <button
-                onClick={() => setTestType('http')}
-                className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
-                  testType === 'http'
-                    ? 'border-blue-600 bg-blue-50 text-blue-700 font-bold'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <div className="text-xs font-bold">HTTP Web</div>
-                <div className="text-[10px] text-slate-500">Port 80 CBT</div>
-              </button>
-
-              <button
-                onClick={() => setTestType('dhcp')}
-                className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
-                  testType === 'dhcp'
-                    ? 'border-blue-600 bg-blue-50 text-blue-700 font-bold'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <div className="text-xs font-bold">DHCP Lease</div>
-                <div className="text-[10px] text-slate-500">DORA Flow</div>
-              </button>
-            </div>
-
-            {/* Source Device */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Perangkat Asal (Source):</label>
-              <select
-                value={testSource}
-                onChange={(e) => setTestSource(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
-              >
-                <option value="pc1">PC-1 Siswa (192.168.10.15 - VLAN {switchPorts['Fa0/1'].vlan})</option>
-                <option value="pc2">PC-2 Guru (192.168.20.25 - VLAN {switchPorts['Fa0/2'].vlan})</option>
-              </select>
-            </div>
-
-            {/* Target Device (if not DHCP) */}
-            {testType !== 'dhcp' && (
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Perangkat Tujuan (Target):</label>
-                <select
-                  value={testTarget}
-                  onChange={(e) => setTestTarget(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
-                >
-                  <option value="server">Web Server CBT (192.168.30.100 - VLAN {switchPorts['Fa0/3'].vlan})</option>
-                  <option value="pc2">PC-2 Guru (192.168.20.25 - VLAN {switchPorts['Fa0/2'].vlan})</option>
-                  <option value="pc1">PC-1 Siswa (192.168.10.15 - VLAN {switchPorts['Fa0/1'].vlan})</option>
-                </select>
-              </div>
-            )}
-
-            {/* Run Button */}
-            <button
-              onClick={handleRunTest}
-              disabled={isTesting}
-              className={`w-full py-3 rounded-xl font-bold text-xs sm:text-sm text-white flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
-                isTesting ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/25'
-              }`}
-            >
-              {isTesting ? (
-                <>
-                  <Activity className="w-4 h-4 animate-spin" />
-                  <span>Mengirim Paket Jaringan...</span>
-                </>
-              ) : (
-                <>
-                  <Send className="w-4 h-4" />
-                  <span>Jalankan Simulasi {testType.toUpperCase()}</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Test Logs & Live Diagnostic (Col 7) */}
-          <div className="lg:col-span-7 bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Terminal className="w-4 h-4 text-emerald-600" />
-                <h3 className="text-sm font-black text-slate-900">Hasil Diagnostik & Analisis Paket</h3>
-              </div>
-              {testResult && (
-                <span
-                  className={`text-xs font-black px-2.5 py-0.5 rounded-full ${
-                    testResult === 'success'
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-rose-100 text-rose-700'
-                  }`}
-                >
-                  {testResult === 'success' ? 'SUCCESS (OK)' : 'FAILED (DROP)'}
-                </span>
-              )}
-            </div>
-
-            {/* Diagnostic Terminal Screen */}
-            <div className="h-64 rounded-2xl bg-slate-950 p-4 font-mono text-xs text-slate-300 overflow-y-auto space-y-1.5 border border-slate-800">
-              {testLogs.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-500 italic">
-                  <Activity className="w-8 h-8 mb-2 opacity-50 text-slate-600" />
-                  <span>Tekan tombol "Jalankan Simulasi" untuk mengamati aliran paket data secara langsung.</span>
-                </div>
-              ) : (
-                testLogs.map((log, i) => (
-                  <div
-                    key={i}
-                    className={`leading-relaxed ${
-                      log.includes('[SUKSES]') || log.includes('200 OK')
-                        ? 'text-emerald-400 font-bold'
-                        : log.includes('[GAGAL]')
-                        ? 'text-rose-400 font-bold'
-                        : log.includes('[SOLUSI]')
-                        ? 'text-amber-400'
-                        : 'text-slate-300'
-                    }`}
-                  >
-                    {log}
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Mini Web Page Preview if HTTP test successful */}
-            {testType === 'http' && testResult === 'success' && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl animate-in fade-in">
-                <div className="flex items-center gap-2 text-xs font-black text-emerald-800 mb-1">
-                  <Globe className="w-4 h-4 text-emerald-600" />
-                  <span>Preview Web Server CBT (http://192.168.30.100)</span>
-                </div>
-                <p className="text-xs text-emerald-900">
-                  Portal Ujian CBT SIJA terbuka sempurna! Akses HTTP inter-VLAN dari Lab Siswa ke Server Farm berhasil dirutekan.
-                </p>
-              </div>
-            )}
-          </div>
+      {/* 2. MODE SELECTOR & SCENARIO GUIDE */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-slate-200/90 shadow-xs">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab('simulator')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'simulator'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <Network className="w-4 h-4" />
+            <span>Simulator Visual & Praktik</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('guide')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'guide'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>Panduan Langkah Praktikum (4 Langkah)</span>
+          </button>
         </div>
-      )}
 
-      {/* TAB 2: SWITCHING (VLAN L2) */}
-      {activeTab === 'switching' && (
-        <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs space-y-5">
+        <div className="flex items-center gap-2 text-xs font-medium text-slate-500 pr-2">
+          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Status Jaringan: Siap Diuji</span>
+        </div>
+      </div>
+
+      {/* TAB: GUIDED 4-STEP MISSION */}
+      {activeTab === 'guide' && (
+        <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-xs space-y-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
-                <Layers className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-slate-900">Konfigurasi Switch Port & Database VLAN</h3>
-                <p className="text-[11px] text-slate-500">Tentukan alokasi nomor VLAN pada port FastEthernet switch</p>
-              </div>
-            </div>
-          </div>
-
-          {/* VLAN Reference Table */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {INITIAL_VLANS.map((v) => (
-              <div key={v.id} className={`p-3 rounded-2xl border ${v.color}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-black">VLAN {v.id}</span>
-                  <span className={`text-[10px] text-white font-bold px-2 py-0.5 rounded ${v.badgeColor}`}>
-                    {v.name}
-                  </span>
-                </div>
-                <div className="text-[11px] font-mono text-slate-600">{v.subnet}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Switch Ports Assignment Controls */}
-          <div className="border border-slate-200 rounded-2xl overflow-hidden">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
-                <tr>
-                  <th className="p-3">Port Switch</th>
-                  <th className="p-3">Mode Port</th>
-                  <th className="p-3">Perangkat Terhubung</th>
-                  <th className="p-3">VLAN Assignment</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                {Object.entries(switchPorts).map(([portKey, portData]) => (
-                  <tr key={portKey} className="hover:bg-slate-50/70">
-                    <td className="p-3 font-mono font-bold text-slate-900">{portKey}</td>
-                    <td className="p-3">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          portData.mode === 'trunk'
-                            ? 'bg-purple-100 text-purple-700'
-                            : 'bg-blue-100 text-blue-700'
-                        }`}
-                      >
-                        {portData.mode}
-                      </span>
-                    </td>
-                    <td className="p-3 font-medium">{portData.label}</td>
-                    <td className="p-3">
-                      {portData.mode === 'trunk' ? (
-                        <span className="text-[11px] font-mono text-purple-700 bg-purple-50 px-2 py-1 rounded">
-                          Allowed: 10, 20, 30 (802.1Q)
-                        </span>
-                      ) : (
-                        <select
-                          value={portData.vlan}
-                          onChange={(e) => updatePortVlan(portKey, e.target.value)}
-                          className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 cursor-pointer focus:outline-none focus:border-blue-500"
-                        >
-                          <option value="10">VLAN 10 (Siswa)</option>
-                          <option value="20">VLAN 20 (Guru)</option>
-                          <option value="30">VLAN 30 (Server CBT)</option>
-                        </select>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-2.5 text-xs text-amber-800">
-            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <span>
-              <strong>Konsep Praktik SIJA:</strong> Jika port PC-1 dan Server CBT berada di nomor VLAN yang berbeda, mereka tidak akan bisa saling ping kecuali terdapat router (Router-on-a-Stick) yang aktif untuk merutekan paket.
+            <h3 className="text-base font-black text-slate-900">4 Langkah Praktikum Menghubungkan Jaringan Sekolah:</h3>
+            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+              Misi Terpandu
             </span>
           </div>
-        </div>
-      )}
 
-      {/* TAB 3: ROUTING (L3 STICK) */}
-      {activeTab === 'routing' && (
-        <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-                <Route className="w-4 h-4" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={`p-4 rounded-2xl border transition-all ${activeStep === 1 ? 'border-blue-500 bg-blue-50/50' : 'border-slate-200 bg-slate-50/60'}`}>
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center">1</span>
+                <h4 className="text-xs font-black text-slate-900">Uji Ping Dalam 1 VLAN yang Sama</h4>
               </div>
-              <div>
-                <h3 className="text-sm font-black text-slate-900">Router-on-a-Stick (Inter-VLAN Routing)</h3>
-                <p className="text-[11px] text-slate-500">Membagi physical interface Gi0/0 menjadi sub-interface logis 802.1Q</p>
+              <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                Ubah port PC-1 dan Server CBT agar berada di VLAN yang sama (VLAN 10). Jalankan ping.
+              </p>
+              <div className="text-[11px] font-bold text-emerald-700 bg-emerald-100/70 p-2 rounded-lg">
+                💡 Hasil yang diharapkan: Ping Sukses seketika karena switch langsung meneruskan paket tanpa lewat router.
               </div>
             </div>
 
-            {/* Toggle Inter-VLAN Routing */}
+            <div className={`p-4 rounded-2xl border transition-all ${activeStep === 2 ? 'border-blue-500 bg-blue-50/50' : 'border-slate-200 bg-slate-50/60'}`}>
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center">2</span>
+                <h4 className="text-xs font-black text-slate-900">Pisahkan Server ke VLAN 30 & Matikan Router</h4>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                Ubah Server ke VLAN 30 dan matikan fitur Router-on-a-Stick. Coba ping dari PC-1 (VLAN 10).
+              </p>
+              <div className="text-[11px] font-bold text-rose-700 bg-rose-100/70 p-2 rounded-lg">
+                🛑 Hasil yang diharapkan: Paket terisolasi (Drop)! Ini membuktikan fungsi keamanan pemisahan segmen VLAN.
+              </div>
+            </div>
+
+            <div className={`p-4 rounded-2xl border transition-all ${activeStep === 3 ? 'border-blue-500 bg-blue-50/50' : 'border-slate-200 bg-slate-50/60'}`}>
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="w-6 h-6 rounded-full bg-purple-600 text-white text-xs font-black flex items-center justify-center">3</span>
+                <h4 className="text-xs font-black text-slate-900">Nyalakan Router-on-a-Stick</h4>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                Nyalakan saklar Router-on-a-Stick. Router akan membaca tag 802.1Q dan menyeberangkan paket antar-VLAN.
+              </p>
+              <div className="text-[11px] font-bold text-blue-700 bg-blue-100/70 p-2 rounded-lg">
+                🚀 Hasil yang diharapkan: Ping lintas-VLAN berhasil melalui router sub-interface!
+              </div>
+            </div>
+
+            <div className={`p-4 rounded-2xl border transition-all ${activeStep === 4 ? 'border-blue-500 bg-blue-50/50' : 'border-slate-200 bg-slate-50/60'}`}>
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-black flex items-center justify-center">4</span>
+                <h4 className="text-xs font-black text-slate-900">Buka Web Portal Ujian CBT (HTTP)</h4>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                Ubah mode uji dari "Ping" ke "HTTP Web". Klik uji koneksi untuk memuat halaman website ujian.
+              </p>
+              <div className="text-[11px] font-bold text-emerald-700 bg-emerald-100/70 p-2 rounded-lg">
+                🌐 Hasil yang diharapkan: HTTP 200 OK dengan preview portal ujian CBT sekolah.
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
             <button
-              onClick={() => {
-                setInterVlanRoutingEnabled(!interVlanRoutingEnabled);
-                if (showToast) {
-                  showToast(
-                    interVlanRoutingEnabled ? 'Inter-VLAN Routing Dinonaktifkan' : 'Inter-VLAN Routing Diaktifkan',
-                    interVlanRoutingEnabled ? 'error' : 'success'
-                  );
-                }
-              }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-                interVlanRoutingEnabled
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-500/20'
-                  : 'bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-500/20'
-              }`}
+              onClick={() => setActiveTab('simulator')}
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer flex items-center gap-2"
             >
-              <span>{interVlanRoutingEnabled ? 'Inter-VLAN Routing: ON' : 'Inter-VLAN Routing: OFF'}</span>
+              <span>Mulai Praktik di Simulator</span>
+              <ArrowRight className="w-4 h-4" />
             </button>
           </div>
+        </div>
+      )}
 
-          {/* Sub-Interfaces Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {Object.entries(subInterfaces).map(([subName, subData]) => (
-              <div key={subName} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-black text-slate-900">{subName}</span>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                    UP
-                  </span>
+      {/* TAB: INTERACTIVE SIMULATOR & WORKBENCH */}
+      {activeTab === 'simulator' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Visual Topology Diagram (Col 8) */}
+          <div className="lg:col-span-8 space-y-4">
+            <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs relative overflow-hidden">
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Diagram Topologi Sekolah Terpadu</h3>
+                  <p className="text-xs text-slate-500">Klik dan atur port switch atau jalankan simulasi paket</p>
                 </div>
-                <div className="text-[11px] text-slate-600 font-mono">
-                  <div>IP: <strong>{subData.ip}</strong></div>
-                  <div>Encapsulation: <strong>dot1Q {subData.vlan}</strong></div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-700">VLAN 10: Siswa</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-700">VLAN 20: Guru</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">VLAN 30: Server CBT</span>
                 </div>
               </div>
-            ))}
+
+              {/* Clean Airy Visual Canvas */}
+              <div className="relative rounded-2xl bg-linear-to-b from-slate-50 via-white to-slate-50 border border-slate-200/90 p-6 flex flex-col items-center justify-between min-h-[380px]">
+                {/* 1. TOP: ROUTER GATEWAY */}
+                <div className="flex flex-col items-center relative z-10">
+                  <div
+                    className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-md transition-all ${
+                      interVlanRouting ? 'bg-indigo-600 ring-4 ring-indigo-100' : 'bg-slate-400'
+                    }`}
+                  >
+                    <Server className="w-7 h-7" />
+                  </div>
+                  <div className="text-xs font-black text-slate-900 mt-1.5">Router-on-a-Stick (L3)</div>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <span className="text-[10px] font-mono text-slate-500">Port Gi0/0 (Trunk 802.1Q)</span>
+                    <span
+                      className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                        interVlanRouting ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                      }`}
+                    >
+                      {interVlanRouting ? 'Routing ON' : 'Routing OFF'}
+                    </span>
+                  </div>
+
+                  {/* Trunk Cable Line */}
+                  <div className="w-1 h-12 bg-indigo-300 relative my-1 rounded-full">
+                    {animatedHop === 3 && (
+                      <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-indigo-600 animate-ping" />
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. MIDDLE: CORE SWITCH CATALYST */}
+                <div className="flex flex-col items-center relative z-10">
+                  <div className="w-14 h-14 rounded-2xl bg-slate-800 text-white flex items-center justify-center shadow-md ring-4 ring-slate-100">
+                    <Network className="w-7 h-7 text-cyan-400" />
+                  </div>
+                  <div className="text-xs font-black text-slate-900 mt-1.5">Switch Catalyst 2960 (L2)</div>
+                  <div className="text-[10px] text-slate-500 font-mono">Port Fa0/1, Fa0/2, Fa0/3, Gi0/1</div>
+
+                  {/* Fan out cables */}
+                  <div className="w-64 h-8 border-b-2 border-slate-300 border-x-2 rounded-b-xl my-1 relative">
+                    {animatedHop === 2 && (
+                      <div className="absolute left-1/2 -translate-x-1/2 -top-1 w-3 h-3 rounded-full bg-cyan-500 animate-ping" />
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. BOTTOM: END DEVICES */}
+                <div className="w-full grid grid-cols-3 gap-3 pt-2 relative z-10">
+                  {/* PC-1 Siswa */}
+                  <div
+                    className={`p-3 rounded-2xl border text-center transition-all ${
+                      simSource === 'pc1'
+                        ? 'border-blue-500 bg-blue-50/70 shadow-sm'
+                        : 'border-slate-200 bg-white'
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-blue-600 text-white mx-auto flex items-center justify-center shadow-xs">
+                      <Laptop className="w-5 h-5" />
+                    </div>
+                    <div className="text-xs font-black text-slate-900 mt-1.5">PC-1 (Lab Siswa)</div>
+                    <div className="text-[10px] font-mono text-slate-500">192.168.10.15</div>
+                    <div className="mt-1.5">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                        VLAN {pc1Vlan}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* PC-2 Guru */}
+                  <div
+                    className={`p-3 rounded-2xl border text-center transition-all ${
+                      simTarget === 'pc2' || simSource === 'pc2'
+                        ? 'border-purple-500 bg-purple-50/70 shadow-sm'
+                        : 'border-slate-200 bg-white'
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-purple-600 text-white mx-auto flex items-center justify-center shadow-xs">
+                      <Laptop className="w-5 h-5" />
+                    </div>
+                    <div className="text-xs font-black text-slate-900 mt-1.5">PC-2 (Ruang Guru)</div>
+                    <div className="text-[10px] font-mono text-slate-500">192.168.20.25</div>
+                    <div className="mt-1.5">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                        VLAN {pc2Vlan}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Server CBT */}
+                  <div
+                    className={`p-3 rounded-2xl border text-center transition-all ${
+                      simTarget === 'server'
+                        ? 'border-emerald-500 bg-emerald-50/70 shadow-sm'
+                        : 'border-slate-200 bg-white'
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white mx-auto flex items-center justify-center shadow-xs">
+                      <Server className="w-5 h-5" />
+                    </div>
+                    <div className="text-xs font-black text-slate-900 mt-1.5">Server Ujian CBT</div>
+                    <div className="text-[10px] font-mono text-slate-500">192.168.30.100</div>
+                    <div className="mt-1.5">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                        VLAN {serverVlan}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Simulation Result Box */}
+              {simulationResult && (
+                <div
+                  className={`mt-4 p-4 rounded-2xl border animate-in fade-in duration-200 ${
+                    simulationResult.success
+                      ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
+                      : 'bg-rose-50/80 border-rose-200 text-rose-900'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-2">
+                      {simulationResult.success ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                      ) : (
+                        <XCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                      )}
+                      <h4 className="text-xs sm:text-sm font-black">{simulationResult.title}</h4>
+                    </div>
+                    {simulationResult.latency && (
+                      <span className="text-[10px] font-mono bg-white px-2 py-0.5 rounded border border-emerald-200 font-bold">
+                        Latensi: {simulationResult.latency}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs leading-relaxed mb-2 opacity-90">
+                    {simulationResult.explanation}
+                  </p>
+                  {simulationResult.solution && (
+                    <div className="text-xs font-bold text-amber-800 bg-amber-100/70 p-2.5 rounded-xl border border-amber-200">
+                      💡 Solusi: {simulationResult.solution}
+                    </div>
+                  )}
+
+                  {/* Flow Path Breadcrumbs */}
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-slate-200/40 text-[11px] font-mono">
+                    <span className="font-bold text-slate-600">Alur Paket:</span>
+                    {simulationResult.path.map((p, i) => (
+                      <React.Fragment key={i}>
+                        <span className="bg-white/80 px-2 py-0.5 rounded border text-slate-700 font-bold">
+                          {p}
+                        </span>
+                        {i < simulationResult.path.length - 1 && <span className="text-slate-400">→</span>}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Cisco Command Reference Box */}
-          <div className="rounded-2xl bg-slate-950 p-4 font-mono text-xs text-slate-300 border border-slate-800 space-y-1">
-            <div className="text-slate-500 font-bold mb-1"># Cuplikan Konfigurasi Cisco Router-on-a-Stick:</div>
-            <div className="text-cyan-400">Router(config)# interface GigabitEthernet0/0.10</div>
-            <div className="text-slate-300">Router(config-subif)# encapsulation dot1Q 10</div>
-            <div className="text-slate-300">Router(config-subif)# ip address 192.168.10.1 255.255.255.0</div>
-            <div className="text-cyan-400">Router(config)# interface GigabitEthernet0/0.30</div>
-            <div className="text-slate-300">Router(config-subif)# encapsulation dot1Q 30</div>
-            <div className="text-slate-300">Router(config-subif)# ip address 192.168.30.1 255.255.255.0</div>
+          {/* Interactive Controls Panel (Col 4) */}
+          <div className="lg:col-span-4 space-y-4">
+            {/* Control 1: Test Action Box */}
+            <div className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs space-y-4">
+              <div className="flex items-center gap-2">
+                <Send className="w-4 h-4 text-blue-600" />
+                <h3 className="text-sm font-black text-slate-900">Uji Kirim Paket</h3>
+              </div>
+
+              {/* Mode Toggle */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setTestMode('ping')}
+                  className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    testMode === 'ping'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  Ping ICMP
+                </button>
+                <button
+                  onClick={() => setTestMode('http')}
+                  className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    testMode === 'http'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  HTTP Web (CBT)
+                </button>
+              </div>
+
+              {/* Source Select */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Pengirim (Source):</label>
+                <select
+                  value={simSource}
+                  onChange={(e) => setSimSource(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="pc1">PC-1 Siswa (VLAN {pc1Vlan})</option>
+                  <option value="pc2">PC-2 Guru (VLAN {pc2Vlan})</option>
+                </select>
+              </div>
+
+              {/* Target Select */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Tujuan (Destination):</label>
+                <select
+                  value={simTarget}
+                  onChange={(e) => setSimTarget(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="server">Server Ujian CBT (VLAN {serverVlan})</option>
+                  <option value="pc2">PC-2 Guru (VLAN {pc2Vlan})</option>
+                </select>
+              </div>
+
+              {/* Run Button */}
+              <button
+                onClick={runSimulation}
+                disabled={isSimulating}
+                className={`w-full py-3 rounded-xl font-bold text-xs sm:text-sm text-white flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
+                  isSimulating ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/25'
+                }`}
+              >
+                {isSimulating ? (
+                  <>
+                    <Activity className="w-4 h-4 animate-spin" />
+                    <span>Paket Sedang Berjalan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4 fill-white" />
+                    <span>Jalankan Pengujian</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Control 2: VLAN & Router Assignment */}
+            <div className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs space-y-4">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-purple-600" />
+                <h3 className="text-sm font-black text-slate-900">Ubah Nomor VLAN Port</h3>
+              </div>
+
+              {/* PC-1 Port VLAN */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Port PC-1 (Fa0/1):</label>
+                <select
+                  value={pc1Vlan}
+                  onChange={(e) => setPc1Vlan(parseInt(e.target.value, 10))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="10">VLAN 10 (Siswa Lab)</option>
+                  <option value="20">VLAN 20 (Guru Staff)</option>
+                  <option value="30">VLAN 30 (Server Farm)</option>
+                </select>
+              </div>
+
+              {/* Server Port VLAN */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Port Server CBT (Fa0/3):</label>
+                <select
+                  value={serverVlan}
+                  onChange={(e) => setServerVlan(parseInt(e.target.value, 10))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="30">VLAN 30 (Server Farm - Default)</option>
+                  <option value="10">VLAN 10 (Jadikan 1 VLAN dengan Siswa)</option>
+                </select>
+              </div>
+
+              {/* Router-on-a-Stick Switch */}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-slate-900">Router-on-a-Stick</div>
+                  <div className="text-[10px] text-slate-500">Merutekan paket lintas-VLAN</div>
+                </div>
+                <button
+                  onClick={() => setInterVlanRouting(!interVlanRouting)}
+                  className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    interVlanRouting ? 'bg-emerald-500' : 'bg-slate-300'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 rounded-full bg-white transition-transform absolute top-0.5 shadow-xs ${
+                      interVlanRouting ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
